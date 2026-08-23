@@ -1,64 +1,152 @@
-# Day 002: Python Memory Model, Mutability, and Floating Point Precision
+# Day 002 — Names, Objects, and Mutability
 
-### 1. Variables as Labels, Not Boxes
-Variables in Python do not store data values directly. Instead, they act as labels or pointers to objects located in memory. Assigning one variable to another (`list_b = list_a`) creates a shared reference to the exact same memory address.
-
-### 2. Mutable vs. Immutable Types
-* **Mutable objects** (like lists) can change their contents in place without altering their memory address. Modifying the object through any label updates the single shared instance.
-* **Immutable objects** (like strings) cannot be altered after creation. Any operations that seem to modify a string actually generate a brand new string at a completely different memory address, leaving the original unchanged.
-
-### 3. Shallow Copies vs. Deep Copies
-* A **shallow copy** (`list.copy()`) creates a new outer list container, but the elements inside still point to the exact same objects as the original list. If those inner elements are mutable (like a list of lists), modifying a nested item affects both the original and the copy.
-* A **deep copy** (`copy.deepcopy()`) recursively clones the outer container and all nested objects inside it, making the copy entirely independent of the original.
-
-### 4. Function Arguments and Shared References
-When you pass an object into a Python function, the function parameter receives a reference to the original object, not a copy. If the object is mutable, modifications made inside the function directly alter the original object outside the function.
-
-### 5. Mutable Default Arguments (The Trap)
-Default parameter values are evaluated exactly once when the function is defined, not when it is executed. If a mutable object like an empty list (`[]`) is used as a default argument, that single list persists across all function calls, accumulating changes over time.
-
-### 6. Binary Floating-Point Precision
-Computers store numbers in binary format (base 2). Certain base 10 decimals, like 0.1 and 0.2, cannot be represented precisely in finite binary fractions. This fractional truncation causes small rounding errors during arithmetic operations.
+Reference notes. Read these *after* trying to recall the answer yourself.
 
 ---
 
-# Day 002: Code Behavior Explanations
+## First: what "memory" even means
 
-### Problem 1: Two Names, One List (Mutability Experiment)
+Your computer keeps things in two places.
 
-#### List Behavior
-When you run `list_b = list_a`, both variables point to the same list object in memory. Calling `list_b.append(911)` updates that shared container. Because `list_a` looks at that same memory location, printing `list_a` shows the updated contents. The `id()` values for both variables remain identical before and after the operation.
+**Storage** (the hard drive) is the filing cabinet. Big, slow-ish, survives being
+switched off. Your `solution.py` file lives here.
 
-#### String Behavior
-When you run `str_b = str_a`, both variables start out pointing to the same string object. However, strings are immutable. Running `str_b = str_b + "what's up?"` forces Python to create a brand new string object at a new memory location and updates the `str_b` label to point to it. `str_a` remains pointing to the original, untouched memory location, which is why it still prints "john_doe". The `id()` output shows `str_b` moving to a new memory address while `str_a` stays the same.
+**Memory** (RAM) is the desk. Smaller, much faster, and **wiped clean every time
+a program ends**. This is where a program does its actual work.
+
+Run your script and Python reads the file from the cabinet, then builds
+everything — every list, string, number — on the desk. Program ends, desk
+cleared. That's why data disappears unless you deliberately write it back to a
+file.
+
+### The pigeonhole picture
+
+Picture memory as an enormous wall of numbered pigeonholes. Millions of them.
+
+When you write `list_a = [1,2,3]`, **two separate things** happen:
+
+1. Python finds an empty hole, builds the list, puts it there — say hole
+   `4305783104`.
+2. Python writes down: *the name `list_a` refers to hole `4305783104`*.
+
+**`id()` shows you the hole number.** That's all it is.
+
+Proof this desk is wiped between runs: the ids were `4305783104` on one run and
+`4373678400` on the next. Same code, different holes, fresh memory.
 
 ---
 
-### Problem 2: List of Lists (Deep Copy Experiment)
+## The core model
 
-In the provided script, `copy.deepcopy()` was used to duplicate `list_1`. Because it was a deep copy, Python built a new outer list and completely new nested inner lists. 
+**A name is a sticky note, not a box.**
 
-When `list_2[1].append("abc")` runs, it only alters the second nested list inside `list_2`. The original `list_1` remains entirely unaffected. The output confirms this independence because `id(list_1) == id(list_2)` and `id(list_1[1]) == id(list_2[1])` both return `False`.
+The object lives in a pigeonhole. The name is a label stuck to it. Name and
+object are two different things.
 
-If a shallow copy had been used instead, `id(list_1[1]) == id(list_2[1])` would be `True`, and modifying the inner list of the copy would have altered the original list as well.
-
----
-
-### Problem 3: Passing Lists into Functions
-
-When you pass the `numbers` list into `add_to_list(my_list)`, the parameter `my_list` becomes an additional label pointing directly to the external `numbers` list object in memory. 
-
-Running `my_list.append("new_item")` alters that shared memory space. Because no copy was made, the changes are preserved and visible when you print `numbers` outside the function, even though the function has no return statement.
+**`b = a` does not copy anything.** It writes a second sticky note and puts it on
+the *same* object. One object, two notes. Same `id()` proves it.
 
 ---
 
-### Problem 4: The Famous Trap (Mutable Defaults)
+## The crux: two operations, easily confused
 
-#### Why the first version fails
-In the function `def add_to_inventory(inventory=[])`, the default list is created once at definition time. Calling `add_to_inventory()` three times with no arguments reuses that exact same list container every single time. As a result, the string "item" accumulates, printing `['item']`, then `['item', 'item']`, and finally `['item', 'item', 'item']`.
+This is the actual lesson of the day.
 
-#### Why the second version works
-To fix this, the default value is set to the immutable placeholder `None`. 
+- **Mutate** (`list_b.append(911)`) — reach into the object and change its
+  contents. No note moves. Every name attached to that hole sees the change.
+- **Rebind** (`list_b = something`) — peel the label off and stick it on a
+  *different* object. The old object is untouched; other names stay on it.
+
+> **The operation decides the outcome. The type decides which operations are
+> available.**
+
+Lists, dicts and sets can be mutated. Strings, numbers and tuples cannot — so
+rebinding is your only option with them.
+
+That is the *only* reason strings looked different from lists. Not a separate
+rule — the same rule with one option unavailable.
+
+### The experiment that proves it
+
+Take a list and use `list_b = list_b + [911]` instead of `.append()`. You get the
+**string result**: `list_a` untouched, `list_b` on a new id. Same type, opposite
+outcome. The type was never the deciding factor.
+
+### The bug that hid this
+
+The first attempt had both lines:
+
+```
+list_b = list_b + [911]   # rebinds — link severed here
+list_b.append(911)        # appends to the NEW list
+```
+
+The rebind broke the connection before the mutation happened, so `list_a` looked
+untouched and the demonstration failed.
+
+### Watch out for `+=`
+
+It looks like plain assignment but doesn't always behave like it. On a list it
+mutates in place; on a string it rebinds. When it eventually confuses you, this
+is why.
+
+---
+
+## The three copying cases
+
+| | outer object | inner objects |
+|---|---|---|
+| `b = a` (shared reference) | same | same |
+| `b = a.copy()` (shallow) | **new** | same |
+| `b = copy.deepcopy(a)` (deep) | **new** | **new** |
+
+**Shallow means one level deep and no further.** Copying a list of lists builds a
+new outer list, but it copies the *references* — the new outer list points at the
+same inner pigeonholes. Mutate an inner list through the copy and the original
+changes.
+
+The two ids to check:
+
+- `id(list_1)` vs `id(list_2)` — the outer objects
+- `id(list_1[1])` vs `id(list_2[1])` — the inner objects
+
+If those two answers differ from each other, you're looking at a shallow copy.
+Both `False` means a genuine deep copy.
+
+---
+
+## Functions receive names, not copies
+
+Passing an object into a function is **just assignment**. The parameter becomes
+one more sticky note on the same hole.
+
+So a function that appends to its parameter is appending to *your* list. No
+`return` needed, no reassignment — the caller's data changed.
+
+Not a bug in itself; sometimes it's exactly what you want. But it should be a
+**decision, not an accident**.
+
+> The habit worth building: for every function you call, know whether it
+> *modifies your data* or *returns new data*.
+
+---
+
+## The mutable default trap
+
+```python
+def add_to_inventory(inventory=[]):   # BROKEN
+```
+
+**Timing is the whole explanation.** Python evaluates the default **once, when it
+reads the `def` line** and creates the function object. One empty list, one
+pigeonhole, stapled to the function — which lives as long as the program does.
+
+`inventory` is never a fresh list. It's a note pointing at that one list. Every
+call appends to the same hole. It was never going to reset, because nothing ever
+creates a second list.
+
+### The fix
+
 ```python
 def add_to_inventory(inventory=None):
     if inventory is None:
@@ -66,20 +154,130 @@ def add_to_inventory(inventory=None):
     inventory.append("item")
     return inventory
 ```
-The logic inside the function body runs fresh on every individual function call. If no list is passed, `inventory is None` evaluates to `True`, forcing Python to build a genuinely fresh, empty list container `[]` during that specific execution. Consecutive calls no longer share or accumulate data.
+
+Three reasoning steps:
+
+1. **The default can't be a list at all** — any list there has the same problem.
+   `None` is not a list; nothing can accumulate in it.
+2. **But the parameter still needs a default,** so use a placeholder meaning
+   *"the caller gave me nothing."* It must be immutable and something nobody
+   would pass legitimately. `None` exists for exactly this.
+3. **Build the real list in the body.** Code in the body runs on **every call**,
+   unlike the default which ran once. So a list created there is genuinely fresh.
+
+Trace it: each call sees `inventory is None` → true → a *different* new list in a
+*different* hole. Three calls, three separate `['item']`.
+
+### Why it matters more than it looks
+
+Your script runs for half a second. Real software doesn't.
+
+A server **starts once and stays running for weeks**. The `def` executes at
+startup, creating one list. A cart function with this bug means:
+
+- Monday 9:00 — a customer adds a laptop.
+- Monday 9:05 — a different customer opens their cart. **A stranger's laptop is
+  in it.**
+- By Friday, ten thousand items from every visitor.
+
+Two disasters from one line: **data leaking between users** (a privacy breach)
+and a **memory leak** — the list only grows, nothing empties it, and days later
+the server runs out of memory. The crash log points at whatever allocated last,
+not at the cause. People lose weeks to this.
+
+**The bug's severity depends entirely on how long the program lives.** Harmless
+in a script, catastrophic in a service. Which is why you fix it everywhere — you
+don't get to know in advance which functions end up inside something
+long-running.
 
 ---
 
-### Problem 5: Decimal Math and Base 2 Truncation
+## `is` vs `==`
 
-#### The 0.1 + 0.2 Issue
-Running `print(0.1 + 0.2)` outputs `0.30000000000000004` instead of `0.3`. This happens because computers represent numbers using the IEEE 754 binary floating-point standard. Decimal fractions like 0.1 and 0.2 repeat infinitely when converted to binary, similar to how 1/3 repeats infinitely as 0.333333 in base 10. The computer truncates these infinite fractions to fit into a 53-bit memory limit, creating tiny rounding discrepancies that appear when added together.
+- **`is`** — *the same object? the same pigeonhole?*
+- **`==`** — *the same value?*
 
-#### The Banking Solution
-A bank cannot tolerate fractional rounding errors because losing a microscopic fraction of a cent over millions of automated interest transactions causes significant financial imbalances. 
+Use `==` for numbers, strings, anything with contents. `is` is essentially only
+used with `None`, and `inventory is None` is correct precisely because there is
+exactly one `None` object in a running program — identity genuinely *is* the
+question.
 
-To solve this, Python provides the `decimal` module. By passing the numbers as strings into the `Decimal` object, Python performs base 10 fixed-point arithmetic instead of binary floating-point math:
-```python
-from decimal import Decimal
-print(Decimal('0.1') + Decimal('0.2')) # Outputs exactly 0.3
-```
+**Why `is 0` appears to work:** Python caches small integer objects, roughly −5
+to 256, because tiny numbers are used constantly. Every `0` is literally the same
+object, so `is` accidentally comes out true. Past the cache it collapses — two
+computed values of 1000 are separate objects and `is` returns `False` despite
+equal values.
+
+Correct for small inputs, silently wrong for large ones. The worst failure mode
+there is. Modern Python emits a `SyntaxWarning` for `is` with a literal.
+
+---
+
+## Truthiness
+
+Python treats certain values as false when used as a question: empty list, empty
+string, empty dict, `0`, `None`. Anything non-empty is true.
+
+So `if not numbers:` reads as *"if numbers is empty."*
+
+---
+
+## Floating point: why `0.1 + 0.2` isn't `0.3`
+
+Output: `0.30000000000000004`.
+
+Computers store numbers in binary (base 2), per the IEEE 754 standard. Decimals
+like 0.1 and 0.2 **repeat infinitely in binary** — the same way 1/3 repeats
+forever as 0.333… in base 10. The computer truncates to fit a fixed number of
+bits, and those tiny rounding errors surface when you do arithmetic.
+
+**Why a bank cannot use this:** losing a fraction of a cent per transaction,
+across millions of automated transactions, produces real imbalances that don't
+reconcile.
+
+**The fix:** the `decimal` module, which does base-10 fixed-point arithmetic.
+Pass the numbers **as strings** — `Decimal('0.1')` — because `Decimal(0.1)` would
+hand it a float that's already wrong.
+
+---
+
+## Why any of this matters
+
+Most bugs crash. You get a traceback, a line number, a cheap fix.
+
+**This class doesn't crash.** Your code runs, produces numbers, and the numbers
+are wrong. Nothing tells you.
+
+Where it shows up in AI work:
+
+- **Keeping a "before" copy of your data.** Hold the raw dataset, clean a copy,
+  compare. If the copy is shallow, cleaning modifies the raw data too — you're
+  comparing something against itself. It matches perfectly and tells you nothing.
+- **Experiment configs.** A base config copied per experiment. If the copies are
+  shallow and the settings nested, changing one changes all. You run five
+  experiments that are secretly identical, get near-identical results, and
+  conclude the setting doesn't matter. Completely wrong, from clean-looking
+  output.
+- **Functions that quietly mutate.** A preprocessing function that modifies in
+  place instead of returning new data means the second function receives data
+  that's already been transformed. Results drift with no visible cause.
+- **Checkpoints.** A snapshot taken before something risky, so you can roll back.
+  If it's shallow it isn't a snapshot — it points at the live state and changes
+  as you go. Roll back and you restore the broken version. The safety net was
+  never attached to anything.
+
+You're already staring at numbers you can't verify by eye — is 0.87 accuracy
+right? You have no independent way to know. That's why a bug which silently
+shifts your numbers can survive for months.
+
+---
+
+## Self-test
+
+1. What does `b = a` actually do?
+2. Two names on one list; I append through one. Does the other change? Why?
+3. Two names on one string; I add text through one. Does the other change? Why?
+4. Which decides the outcome — the operation or the data type?
+5. Why is this dangerous when passing data to a function?
+6. When is a default argument created, and where does it live?
+7. Why is `is 0` wrong but `is None` right?
