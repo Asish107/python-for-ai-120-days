@@ -1,0 +1,4 @@
+Hello, this is my first line.
+Python makes working with files easy.
+I am learning file handling.
+This is a new line, I am sure that this will be added as a new line.
